@@ -1,0 +1,19 @@
+# Render Blueprint for FiveCore repo v0.2 (with ACCESS_TOKEN page protection).
+# Assumes the repository root is fivecore-app/ (Dockerfile at ./Dockerfile).
+# Deploy via Render Dashboard -> New -> Blueprint, or via the Render API.
+# ACCESS_TOKEN is required: without it v0.2 answers 503 on every page/API.
+# INGEST_TOKEN guards the external ingest endpoint; the in-process adapter
+# (ADAPTER_ENABLED=1) writes snapshots directly and does not use it.
+services:
+  - type: web
+    name: fivecore-app
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: ACCESS_TOKEN
+        generateValue: true
+      - key: INGEST_TOKEN
+        generateValue: true
+      - key: ADAPTER_ENABLED
+        value: "1"

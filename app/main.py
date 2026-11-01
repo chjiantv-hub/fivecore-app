@@ -3,7 +3,9 @@
 Auth: every page and API needs ACCESS_TOKEN (?t= query once -> HttpOnly cookie, or X-Token header), constant-time compare.
 Public: /healthz only. Ingest: its own X-Ingest-Token (INGEST_TOKEN), constant-time compare.
 No market data is built in; until an ingest arrives the page shows 行情未接入. Missing fields stay null (未取到)."""
+import asyncio
 import hmac, json, os, sqlite3, datetime as dt
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from fastapi import FastAPI, HTTPException, Header, Request
@@ -11,6 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from .engine import analyze_market, analyze_stock, LICENSED_PREFIX
+from .selection import select_premarket, select_intraday
 
 VERSION = '0.2.0'
 BJ = dt.timezone(dt.timedelta(hours=8))
@@ -34,7 +37,18 @@ def _eq(a: str, b: str) -> bool:
     return bool(a) and bool(b) and hmac.compare_digest(a.encode(), b.encode())
 
 
-app = FastAPI(title='五核智选 FiveCore', version=VERSION, docs_url=None, redoc_url=None, openapi_url=None)
+@asynccontextmanager
+async def lifespan(app):
+    task = None
+    if os.getenv("ADAPTER_ENABLED") == "1":
+        from .adapter import adapter_loop
+        task = asyncio.create_task(adapter_loop())
+    yield
+    if task is not None:
+        task.cancel()
+
+
+app = FastAPI(title='五核智选 FiveCore', version=VERSION, docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
 
 @app.middleware('http')
@@ -201,6 +215,43 @@ def stock_analysis(stock: StockPayload):
                               ('is_mainline', 'is_leader_or_capacity_core', 'absorption_improving', 'sector_confirmation', 'entry_trigger', 'unacceptable_t1_risk')}
     res['market'] = {k: m.get(k) for k in ('environment', 'sentiment', 'feed', 'data_quality', 'data_quality_cn', 'timestamp', 'banner')}
     return res
+
+
+class PremarketStock(BaseModel):
+    code: str
+    name: str = ''
+    prior: str | None = None  # weak | strong | background | excluded
+    auction_signal: str | None = None  # 加强 | 不变 | 减弱 | 失效
+    prior_evidence: str = ''
+
+
+class PremarketRequest(BaseModel):
+    stocks: list[PremarketStock]
+
+
+class IntradayEvidence(BaseModel):
+    sealed_0936: bool | None = None
+    seal_continuous: bool | None = None
+    opens_count: int | None = None
+    volume_ok: bool | None = None
+    diffusion_ok: bool | None = None
+    note: str = ''
+
+
+class IntradayRequest(BaseModel):
+    candidates: list[dict[str, Any]]
+    intraday: dict[str, IntradayEvidence]
+
+
+@app.post('/api/select/premarket')
+def premarket_select(req: PremarketRequest):
+    return select_premarket([s.model_dump() for s in req.stocks])
+
+
+@app.post('/api/select/intraday')
+def intraday_select(req: IntradayRequest):
+    intra = {k: v.model_dump() for k, v in req.intraday.items()}
+    return select_intraday({'candidates': req.candidates}, intra)
 
 
 @app.get('/api/config')
