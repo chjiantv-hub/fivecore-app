@@ -1,0 +1,14 @@
+services:
+  fivecore:
+    build: .
+    container_name: fivecore-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      INGEST_TOKEN: ${INGEST_TOKEN}
+      DB_PATH: /app/data/fivecore.sqlite3
+    volumes:
+      - fivecore-data:/app/data
+volumes:
+  fivecore-data:
