@@ -46,3 +46,43 @@ $('analyze').addEventListener('click',async()=>{const code=$('code').value.trim(
     out.innerHTML=`<h4>${esc(d.name||d.code)}（${esc(d.code)}） · ${esc(d.status)} · ${d.score}/${d.max_score}</h4><p>现价 ${v(d.price)} · 涨跌幅 ${v(d.change_pct,'%')}</p><div class="ck">${rows}</div>${(d.notes||[]).map(n=>'<p>'+esc(n)+'</p>').join('')}${hint}${q}<p>市场快照：${esc(d.market?.environment)} / ${esc(d.market?.sentiment)} · ${esc(d.market?.data_quality_cn||'')}</p><p>${esc(d.reason)}</p>`;}
   catch(e){out.innerHTML=`<h4>暂不可分析</h4><p>${esc(e.message)}</p>`;}});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+// ---- 盘前盘中选股面板（观察池筛选，非买入信号） ----
+const PRIORS=[['','未分类'],['weak','弱'],['strong','强'],['background','背景'],['excluded','失效']];
+const SIGS=[['','未提供'],['加强','加强'],['不变','不变'],['减弱','减弱'],['失效','失效']];
+$('selGrid').innerHTML=[0,1,2,3,4].map(i=>`<div class="form-grid"><label>股票代码<input id="s_code${i}" placeholder="例如 600000" maxlength="6" inputmode="numeric"></label><label>前日分类<select id="s_prior${i}">${PRIORS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label><label>竞价信号<select id="s_sig${i}">${SIGS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label><label>前日证据<input id="s_ev${i}" placeholder="如 5→6晋级失败"></label></div>`).join('');
+let preCandidates=[];
+$('selPremarket').addEventListener('click',async()=>{
+  const stocks=[];
+  for(let i=0;i<5;i++){
+    const code=$('s_code'+i).value.trim();
+    if(!code)continue;
+    if(!/^\d{6}$/.test(code)){alert('第'+(i+1)+'行代码须为6位');return;}
+    stocks.push({code:code,prior:$('s_prior'+i).value||null,auction_signal:$('s_sig'+i).value||null,prior_evidence:$('s_ev'+i).value||''});
+  }
+  const out=$('selPreResult');out.classList.remove('hidden');out.textContent='筛查中…';
+  try{
+    const d=await api('api/select/premarket',{method:'POST',body:JSON.stringify({stocks:stocks})});
+    preCandidates=d.candidates||[];
+    const cands=preCandidates.map(c=>`<div><b>${esc(c.code)} ${esc(c.name||'')} · ${esc(c.kind)}</b><br><span>${esc(c.status)}</span><br><span class="na">9:36 待核实：${esc((c.verify_at_0936||[]).join('、'))}</span>${c.evidence?'<br><span>'+esc(c.evidence)+'</span>':''}</div>`).join('');
+    const rejs=(d.rejected||[]).map(x=>`<div>${esc(x.code)} · ${esc(x.reason)}</div>`).join('');
+    out.innerHTML=`<h4>预信号 ${preCandidates.length} 只</h4>${cands||'<p>无预信号</p>'}${rejs?'<h4>未通过</h4>'+rejs:''}${(d.notes||[]).map(n=>'<p>'+esc(n)+'</p>').join('')}`;
+    $('intraGrid').innerHTML=preCandidates.map((c,idx)=>`<div class="form-grid"><label>${esc(c.code)} 9:36封板<select id="i_seal${idx}"><option value="">未提供</option><option value="1">是</option><option value="0">否</option></select></label><label>封板连续<select id="i_cont${idx}"><option value="">未提供</option><option value="1">是</option><option value="0">否</option></select></label><label>开板次数<input id="i_opens${idx}" type="number" step="1" placeholder="未提供"></label><label>量能核实<select id="i_vol${idx}"><option value="">未提供</option><option value="1">是</option><option value="0">否</option></select></label><label>扩散核实<select id="i_diff${idx}"><option value="">未提供</option><option value="1">是</option><option value="0">否</option></select></label></div>`).join('');
+  }catch(e){out.innerHTML=`<h4>暂不可筛查</h4><p>${esc(e.message)}</p>`;}
+});
+$('selIntraday').addEventListener('click',async()=>{
+  if(!preCandidates.length){alert('请先做 9:27 竞价筛查');return;}
+  const tri=id=>{const x=$(id).value;return x===''?null:x==='1';};
+  const intra={};
+  preCandidates.forEach((c,idx)=>{
+    const op=$('i_opens'+idx).value;
+    intra[c.code]={sealed_0936:tri('i_seal'+idx),seal_continuous:tri('i_cont'+idx),opens_count:op===''?null:Number(op),volume_ok:tri('i_vol'+idx),diffusion_ok:tri('i_diff'+idx)};
+  });
+  const out=$('selIntraResult');out.classList.remove('hidden');out.textContent='确认中…';
+  try{
+    const d=await api('api/select/intraday',{method:'POST',body:JSON.stringify({candidates:preCandidates,intraday:intra})});
+    const conf=(d.confirmed||[]).map(c=>`<div><b>${esc(c.code)} · ${esc(c.kind)}</b><br><span>${esc(c.status)}</span></div>`).join('');
+    const nc=(d.not_confirmed||[]).map(c=>`<div>${esc(c.code)} · 未确认：${esc(c.reason)}</div>`).join('');
+    const rb=(d.rebound_not_reversed||[]).map(c=>`<div>${esc(c.code)} · ${esc(c.reason)}</div>`).join('');
+    out.innerHTML=`<h4>确认候选 ${d.confirmed.length} 只</h4>${conf||'<p>无确认候选</p>'}${nc?'<h4>未确认</h4>'+nc:''}${rb?'<h4>开盘翻红不逆转</h4>'+rb:''}${(d.notes||[]).map(n=>'<p>'+esc(n)+'</p>').join('')}<p>以上为观察候选，非买入指令。</p>`;
+  }catch(e){out.innerHTML=`<h4>暂不可确认</h4><p>${esc(e.message)}</p>`;}
+});

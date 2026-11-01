@@ -17,6 +17,8 @@
 <section class="section-head"><div><h3>候选股分析</h3><p>代码、名称、价格由系统自动取数；判断项须您本人确认，未填写即为「未提供」，不计分</p></div></section>
 <section class="panel"><div class="form-grid"><label>股票代码<input id="code" placeholder="例如 600000" maxlength="6" inputmode="numeric"></label><label>股票名称<input id="name" placeholder="自动取数"></label><label>最新价<input id="price" type="number" step="0.01" placeholder="自动取数"></label><label>涨跌幅 %<input id="change" type="number" step="0.01" placeholder="自动取数"></label></div>
 <div class="tri" id="tri"></div><button class="primary" id="analyze">执行五核检查</button><div id="stockResult" class="result hidden"></div></section>
+<section class="section-head"><div><h3>盘前盘中选股</h3><p>观察池筛选，非买入信号；前日分类与竞价信号须您本人确认，未填写即为「未提供」</p></div></section>
+<section class="panel"><div id="selGrid"></div><button class="primary" id="selPremarket">9:27 竞价筛查</button><div id="selPreResult" class="result hidden"></div><div id="intraGrid"></div><button class="primary" id="selIntraday">9:36 开盘确认</button><div id="selIntraResult" class="result hidden"></div></section>
 <section class="section-head"><div><h3>系统状态</h3><p>数据源与运行环境</p></div></section><section class="panel status-list"><div><span>应用服务</span><b id="apiStatus">检查中</b></div><div><span>行情数据源</span><b id="providerStatus">—</b></div><div><span>最近抓取</span><b id="lastFetch">—</b></div><div><span>外部授权源写入</span><b id="ingestStatus">—</b></div><div><span>自动交易</span><b>关闭（仅辅助决策）</b></div><div><span>数据真实性</span><b>缺失字段显示「未取到」，不补零、不估算</b></div></section>
 <footer>五核智选 · 个人研究与决策辅助工具 · 不构成投资建议</footer>
 </main></div><script src="static/app.js"></script></body></html>
