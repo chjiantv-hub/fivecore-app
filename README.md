@@ -30,6 +30,20 @@ docker compose up -d --build
 
 打开 `http://服务器IP:8000`。正式暴露公网前，必须配置 HTTPS、反向代理、访问控制、防火墙和密钥管理；不要裸露 8000 端口。
 
+## 访问控制（v0.2）
+
+- 必须配置环境变量 `ACCESS_TOKEN`；未配置时除 `/healthz` 外一律返回 503（默认拒绝）。
+- 首次以 `https://域名/?t=<ACCESS_TOKEN>` 打开，之后浏览器以 HttpOnly Cookie 与本地存储保存令牌；API 也可使用请求头 `X-Token`。
+- 令牌比较使用 `hmac.compare_digest`（常数时间）。
+- 写入接口 `/api/ingest/market` 不使用访问令牌，单独使用 `X-Ingest-Token`（`INGEST_TOKEN`）。
+
+## 缺失数据规则（v0.2）
+
+- 缺失字段请传 `null`，不要传 0。上涨+下跌+平盘全为 0、或涨停+跌停+炸板全为 0，均视为缺失。
+- 关键输入缺失时，市场环境 / 情绪周期显示「数据不足」（已知数据可直接证明偏弱时除外）。
+- 个股判断项为三态：是 / 否 / 未提供。未提供或市场「数据不足」时对应项记为未知，**不计分**。
+- `data_quality` 为 `public_web_unlicensed` 时，页面显示「公开网页行情（非授权 Level-1），仅供研究参考」；以 `licensed` 开头视为授权源。
+
 ## 行情推送接口
 
 `POST /api/ingest/market`，请求头 `X-Ingest-Token: <INGEST_TOKEN>`，JSON 示例：
@@ -57,7 +71,8 @@ docker compose up -d --build
 
 ## API
 
-- `GET /api/health`：服务状态。
+- `GET /healthz`：公开存活检查。
+- `GET /api/health`：服务状态与 market_feed（not_configured / public_web_unlicensed / licensed / ingest_unverified）。
 - `GET /api/config`：行情接入配置状态。
 - `GET /api/market/latest`：最近一条市场快照及市场层规则判断。
 - `POST /api/ingest/market`：受密钥保护的市场快照写入。
@@ -66,7 +81,7 @@ docker compose up -d --build
 ## 当前边界 / 下一阶段
 
 1. 目前是 MVP，不包含已签约的实时行情供应商，也不具备全市场自动扫描。
-2. 当前个股检查字段由用户/上游适配器提供；没有提供的证据按未通过处理。
+2. 当前个股检查字段由用户/上游适配器提供；没有提供的证据记为「未知/未提供」，不计分。
 3. 当前规则阈值是透明的初始工程实现，尚未用历史逐笔/分钟数据完成回测校准；不应当视为已经验证的策略参数。
 4. 目前没有云账号凭证、域名、行情授权或部署授权，因此没有替用户创建云资源或公网服务。
 5. 上线前应补充用户认证、HTTPS、速率限制、审计日志、行情数据质量监控、交易日历、时钟同步、备份和告警。

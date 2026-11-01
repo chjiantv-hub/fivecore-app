@@ -6,6 +6,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      ACCESS_TOKEN: ${ACCESS_TOKEN}
       INGEST_TOKEN: ${INGEST_TOKEN}
       DB_PATH: /app/data/fivecore.sqlite3
     volumes:
